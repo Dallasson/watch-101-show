@@ -1,6 +1,9 @@
 package com.app.pulseapp
 
+import android.graphics.Paint
+import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.database.*
 import org.osmdroid.config.Configuration
@@ -8,10 +11,18 @@ import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var map: MapView
+
+    data class LocationPoint(
+        val lat: Double,
+        val lon: Double,
+        val networkType: String = "unknown",
+        val timestamp: Long = 0
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,25 +46,47 @@ class MainActivity : AppCompatActivity() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 map.overlays.clear()
 
-                val geoPoints = mutableListOf<GeoPoint>()
+                val collected = mutableListOf<LocationPoint>()
 
-                for (deviceSnapshot in snapshot.children) {
+                for (deviceSnapshot in snapshot.children) {  // DEVICE ID level
+                    for (pointSnapshot in deviceSnapshot.children) {  // pushed location nodes
 
-                    val lat = deviceSnapshot.child("latitude").getValue(Double::class.java)
-                    val lon = deviceSnapshot.child("longitude").getValue(Double::class.java)
-                    val network = deviceSnapshot.child("networkType").getValue(String::class.java)
-                    val id = deviceSnapshot.key ?: "Unknown Device"
+                        val lat = pointSnapshot.child("latitude").getValue(Double::class.java)
+                        val lon = pointSnapshot.child("longitude").getValue(Double::class.java)
+                        val network = pointSnapshot.child("networkType").getValue(String::class.java) ?: "unknown"
+                        val timestamp = pointSnapshot.child("timestamp").getValue(Long::class.java) ?: 0L
 
-                    if (lat != null && lon != null) {
-                        val point = GeoPoint(lat, lon)
-                        geoPoints.add(point)
-                        addMarker(point, "ID: $id", "Network: $network")
+                        Log.d("Coordinates","Longitude : " + lat)
+                        if (lat != null && lon != null) {
+                            collected.add(
+                                LocationPoint(
+                                    lat = lat,
+                                    lon = lon,
+                                    networkType = network,
+                                    timestamp = timestamp
+                                )
+                            )
+                        }
                     }
                 }
 
-                // Autofit the map to all points
-                if (geoPoints.isNotEmpty()) {
-                    val box = BoundingBox.fromGeoPoints(geoPoints)
+
+                collected.sortBy { it.timestamp }
+
+                collected.forEach {
+                    addMarker(
+                        GeoPoint(it.lat, it.lon),
+                        "Network: ${it.networkType}",
+                        "Time: ${it.timestamp}"
+                    )
+                }
+
+                drawColoredRoutes(collected)
+
+                if (collected.isNotEmpty()) {
+                    val box = BoundingBox.fromGeoPoints(
+                        collected.map { GeoPoint(it.lat, it.lon) }
+                    )
                     map.zoomToBoundingBox(box, true)
                 }
 
@@ -64,13 +97,44 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun drawColoredRoutes(points: List<LocationPoint>) {
+        if (points.size < 2) return
+
+        for (i in 0 until points.size - 1) {
+            val start = points[i]
+            val end = points[i + 1]
+
+            val polyline = Polyline().apply {
+                setPoints(listOf(
+                    GeoPoint(start.lat, start.lon),
+                    GeoPoint(end.lat, end.lon)
+                ))
+                outlinePaint.color = getColorForNetwork(start.networkType)
+                outlinePaint.strokeWidth = 8f
+                outlinePaint.style = Paint.Style.STROKE
+            }
+
+            map.overlays.add(polyline)
+        }
+    }
+
+    private fun getColorForNetwork(type: String): Int {
+        return when (type.lowercase()) {
+            "5g" -> Color.GREEN
+            "lte", "4g" -> Color.YELLOW
+            "3g" -> Color.BLUE
+            "2g", "edge" -> Color.RED
+            "wifi" -> Color.MAGENTA
+            else -> Color.GRAY
+        }
+    }
+
     private fun addMarker(position: GeoPoint, title: String, desc: String?) {
         val marker = Marker(map)
         marker.position = position
         marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
         marker.title = title
         marker.subDescription = desc
-        marker.showInfoWindow()
 
         map.overlays.add(marker)
     }
