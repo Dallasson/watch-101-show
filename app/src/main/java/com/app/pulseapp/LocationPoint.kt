@@ -7,6 +7,6 @@ import kotlinx.parcelize.Parcelize
 data class LocationPoint(
     val lat: Double,
     val lon: Double,
-    val networkType: String = "unknown",
-    val timestamp: Long = 0
+    val networkType: String,
+    val timestamp: Long
 ) : Parcelable
