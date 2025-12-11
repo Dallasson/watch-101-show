@@ -6,9 +6,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.CheckBox
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -18,7 +16,6 @@ class LocationListActivity : AppCompatActivity() {
 
     private lateinit var recyclerView: RecyclerView
     private val allLocations = mutableListOf<LocationPoint>()
-    private val selectedLocations = mutableListOf<LocationPoint>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,10 +39,8 @@ class LocationListActivity : AppCompatActivity() {
 
                         val lat = pointSnapshot.child("latitude").getValue(Double::class.java)
                         val lon = pointSnapshot.child("longitude").getValue(Double::class.java)
-                        val network =
-                            pointSnapshot.child("networkType").getValue(String::class.java) ?: "unknown"
-                        val timestamp =
-                            pointSnapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+                        val network = pointSnapshot.child("networkType").getValue(String::class.java) ?: "unknown"
+                        val timestamp = pointSnapshot.child("timestamp").getValue(Long::class.java) ?: 0L
 
                         if (lat != null && lon != null) {
                             allLocations.add(
@@ -71,7 +66,6 @@ class LocationListActivity : AppCompatActivity() {
         RecyclerView.Adapter<LocationAdapter.LocationViewHolder>() {
 
         inner class LocationViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val checkBox: CheckBox = view.findViewById(R.id.checkBox)
             val textView: TextView = view.findViewById(R.id.textView)
         }
 
@@ -84,46 +78,17 @@ class LocationListActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: LocationViewHolder, position: Int) {
             val loc = items[position]
 
-            holder.textView.text =
-                "Lat: ${loc.lat}, Lon: ${loc.lon}\nNet: ${loc.networkType}\nTime: ${loc.timestamp}"
-
-            // Fix recycling
-            holder.checkBox.setOnCheckedChangeListener(null)
-            holder.checkBox.isChecked = selectedLocations.contains(loc)
-
-            holder.checkBox.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) selectedLocations.add(loc)
-                else selectedLocations.remove(loc)
-            }
-
-            holder.itemView.setOnClickListener {
-                holder.checkBox.isChecked = !holder.checkBox.isChecked
-            }
+            holder.textView.text = "Lat: ${loc.lat}, Lon: ${loc.lon}\nNet: ${loc.networkType}\nTime: ${loc.timestamp}"
         }
 
         override fun getItemCount(): Int = items.size
     }
 
     fun onNextClicked(view: View) {
-        if (selectedLocations.size < 2) {
-            Toast.makeText(this, "Please select at least 2 locations to proceed", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Log values before sending
-        selectedLocations.forEachIndexed { index, loc ->
-            Log.d(
-                "LocationListActivity",
-                "Sending[$index] lat=${loc.lat}, lon=${loc.lon}, net=${loc.networkType}, time=${loc.timestamp}"
-            )
-        }
-
-        // Convert to ArrayList because intent requires Serializable collection type
-        val listToSend = ArrayList(selectedLocations)
+        Log.d("LocationListActivity", "Sending ALL ${allLocations.size} locations")
 
         val intent = Intent(this, MainActivity::class.java)
-        intent.putParcelableArrayListExtra("selected_locations", listToSend)
+        intent.putParcelableArrayListExtra("selected_locations", ArrayList(allLocations))
         startActivity(intent)
     }
-
 }
